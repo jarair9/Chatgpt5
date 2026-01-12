@@ -74,7 +74,7 @@ Sends a message to the AI.
 
 #### **Example Request**
 ```bash
-curl -X POST https://your-app.vercel.app/chat \
+curl -X POST https://chatgpt5-sigma.vercel.app/chat \
      -H "Content-Type: application/json" \
      -d '{
            "message": "Explain black holes.",
@@ -120,3 +120,9 @@ To speed up responses, the application implements a `ChatSession` class:
 
 ### CORS Errors on Localhost
 -   Ensure you are accessing `http://127.0.0.1:5000` and not `localhost` if your frontend requires specific origin matching, although `flask-cors` is set to accept `*`.
+
+## ⏱️ FAQ
+
+### How long does a session last?
+-   **Idle (Vercel)**: If you don't send a message for **~10-15 minutes**, Vercel will shut down the serverless function. The next request will simply start a new session automatically (adding ~1-2s latency).
+-   **Active**: If you keep chatting, the session stays alive indefinitely. If the underlying Claila token expires, the API automatically refreshes it in the background without interrupting you.

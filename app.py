@@ -84,7 +84,43 @@ class ChatSession:
             return False
         return True
 
-session_store = ChatSession()
+
+class SessionPool:
+    def __init__(self, max_sessions=5):
+        self.max_sessions = max_sessions
+        self.sessions = []
+        self.current_index = 0
+        
+    def get_session(self):
+        # If we don't have any sessions yet, create one
+        if len(self.sessions) == 0:
+            new_session = ChatSession()
+            if new_session.get_valid_session():
+                self.sessions.append(new_session)
+                return new_session
+            return None
+            
+        # Try to find a valid session, refreshing if needed
+        for i in range(len(self.sessions)):
+            session = self.sessions[self.current_index % len(self.sessions)]
+            self.current_index = (self.current_index + 1) % len(self.sessions)
+            
+            if session.get_valid_session():
+                return session
+        
+        # If all existing sessions are invalid, try to create a new one
+        if len(self.sessions) < self.max_sessions:
+            new_session = ChatSession()
+            if new_session.get_valid_session():
+                self.sessions.append(new_session)
+                return new_session
+        
+        # If we can't get a valid session, return None
+        return None
+
+
+# Initialize session pool
+session_pool = SessionPool(max_sessions=10)
 
 # --- Routes ---
 
@@ -100,9 +136,10 @@ def chat():
     if not user_message:
         return jsonify({'error': 'No message provided'}), 400
 
-    # Ensure valid session
-    if not session_store.get_valid_session():
-        return jsonify({'error': 'Failed to initialize session. Upstream API may be down.'}), 503
+    # Get a valid session from the pool
+    session = session_pool.get_session()
+    if not session:
+        return jsonify({'error': 'Failed to initialize session. Upstream API may be down or rate-limited.'}), 503
 
     # Prepare Payload
     # Concatenate system prompt if provided
@@ -124,7 +161,7 @@ def chat():
     }
 
     def attempt_request():
-        return requests.post(API_CHAT, cookies=session_store.cookies, headers=session_store.headers, data=data, timeout=30)
+        return requests.post(API_CHAT, cookies=session.cookies, headers=session.headers, data=data, timeout=30)
 
     try:
         # First attempt
@@ -141,7 +178,7 @@ def chat():
             
         if needs_refresh:
             print("[INFO] Session invalid or expired. Refreshing for retry...")
-            if session_store.get_valid_session(force_refresh=True):
+            if session.get_valid_session(force_refresh=True):
                 resp = attempt_request()
             else:
                  return jsonify({'error': 'Session refresh failed after expiry.'}), 503
